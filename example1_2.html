@@ -1,0 +1,97 @@
+<html>
+
+<link rel="stylesheet" href="example.css" type="text/css" />
+
+<script type="text/javascript">
+<!--
+
+function cal(){
+         var cur_eq;
+         var output;
+	 cur_eq = document.getElementById('eq').value;
+	 if(cur_eq && cur_eq !== '数式を入力してください'){
+		 eval("output=" + cur_eq + ";");
+	 	 document.getElementById('result').innerHTML = cur_eq +"=" + output;
+	 }
+	 else{
+		 document.getElementById('result').innerHTML = 'エラー：式が未入力です';
+	 }
+}
+
+var ini = 0;
+function delstr(){
+	if (ini == 0){
+		document.getElementById('eq').value = "";
+		ini = 1;
+	}
+}
+
+function clearstr(){
+	document.getElementById('eq').value = '数式を入力してください';
+	document.getElementById('result').innerHTML = '結果が表示されます';
+	ini = 0;
+	return ini;
+}
+
+var id;
+var num_start = 0;
+function addnum(id){
+	var cur_eq;
+	var clicked_item;
+	cur_eq 		= document.getElementById('eq').value;
+	if(cur_eq === '数式を入力してください'){
+	cur_eq = "";
+	}
+	clicked_item  	= document.getElementById(id).value;
+	document.getElementById('eq').value = cur_eq + clicked_item;
+}
+-->
+</script>
+
+
+<body>
+<p>
+簡易関数電卓<br>
+</p>
+
+<div style="background-color:RGB(200,200,200);width:260px;margin:5px;padding:3px;">
+<div style="background-color:RGB(150,150,150);width:238px;height:80px;margin:auto;text-align:center;padding:1px;">
+<textarea class="center" id="eq" onclick="delstr();">数式を入力してください</textarea>
+</div>
+<table border="2" class="table_num">
+<tr>
+<td><button class="num" id="1" 		onclick="addnum(this.id);"  value="1">1</button></td>
+<td><button class="num" id="2" 		onclick="addnum(this.id);"  value="2">2</button></td>
+<td><button class="num" id="3" 		onclick="addnum(this.id);"  value="3">3</button></td>
+<td rowspan="4">&nbsp;</td>
+<td><button class="num" id="plus"  	onclick="addnum(this.id);"  value="+">+</button></td>
+
+</tr>
+<tr>
+<td><button class="num" id="4" 		onclick="addnum(this.id);"  value="4">4</button></td>
+<td><button class="num" id="5" 		onclick="addnum(this.id);"  value="5">5</button></td>
+<td><button class="num" id="6" 		onclick="addnum(this.id);"  value="6">6</button></td>
+<td><button class="num" id="minus" 	onclick="addnum(this.id);"  value="-">-</button></td>
+</tr>
+<tr>
+<td><button class="num" id="7" 		onclick="addnum(this.id);"  value="7">7</button></td>
+<td><button class="num" id="8" 		onclick="addnum(this.id);"  value="8">8</button></td>
+<td><button class="num" id="9" 		onclick="addnum(this.id);"  value="9">9</button></td>
+<td><button class="num" id="prod"  	onclick="addnum(this.id);"  value="*">*</button></td>
+</tr>
+<tr>
+<td><button class="num" id="0"  	onclick="addnum(this.id);"  value="0">0</button></td>
+<td><button class="num" id="00" 	onclick="addnum(this.id);"  value="00">00</button></td>
+<td><button class="num" id="000" 	onclick="addnum(this.id);"  value="000">000</button></td>
+<td><button class="num" id="quot" 	onclick="addnum(this.id);"  value="/">/</button></td>
+</tr>
+</table>
+<p>
+<button onclick="cal()" style="width:115px;height:50px;margin:0px 0px 5px 10px;font-size:20pt;">計算</button>
+<button onclick="clearstr()" style="width:115px;height:50px;margin:0px 15px 5px 0px;font-size:20pt;">クリア</button>
+</p>
+<textarea id="result"   style="width:240px;height:50px;margin:0px 10px 5px 10px;font-size:15pt;" disabled>結果が表示されます</textarea>
+</div>
+</body>
+
+</html>
