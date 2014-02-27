@@ -1,0 +1,28 @@
+.center{
+	margin-top:5px;
+	margin-left:auto;
+	margin-right:auto;
+	text-align:left;
+	width:233px;
+	height:70px;
+	font-size:15pt;"
+}
+
+.table_num{
+	margin:10px;
+}
+
+
+/* button要素のCSS */
+button{
+	font-size:15pt;
+}
+button.num{
+	width:50px;
+	height:50px;
+}
+/* button要素のCSS(マウスが乗ったとき）*/
+button:hover{
+	background-color:RGB(50,50,50);
+	color:RGB(255,255,255);
+}
