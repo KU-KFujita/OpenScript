@@ -1,0 +1,238 @@
+
+<html>
+
+<head>
+<title>Learning WebGL &mdash; lesson 1</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+
+<!-- Shader‚ÌƒR[ƒh-->
+<script id="shader-fs" type="x-shader/x-fragment">
+    /* float‚Ì¸“x‚ðŽw’è */
+    precision mediump float;
+
+    /* ‚·‚×‚Ä‚ÌƒIƒuƒWƒFƒNƒg‚ð”’F‚Å•\Ž¦ */
+    void main(void) {
+        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    /* Uniform•Ï” :shader‚ÌŠO•”‚©‚çƒAƒNƒZƒX‰Â”\ */
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    void main(void) {
+	/* model-view matrix ‚Æprojection matrix‚ðŠ|‚¯‚½‚à‚Ì‚ðÅI“I‚È’¸“_À•W‚Æ‚µ‚Äo—Í */
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+    }
+</script>
+
+
+<script type="text/javascript">
+    var gl;
+    function initGL(canvas) {
+        try {
+	    // gl => WebGL‚Ì’†S‚Æ‚È‚éƒIƒuƒWƒFƒNƒg‚Ì’è‹`
+            gl = canvas.getContext("experimental-webgl");
+	    // Javascript‚ÌƒIƒuƒWƒFƒNƒg‚É‚Í‚Ç‚ñ‚ÈƒvƒƒpƒeƒB‚à’Ç‰Á‚Å‚«‚é“Á’¥‚ª‚ ‚èC
+	    // viewportWidth‚ÆviewportHeight‚ðV‚½‚É’Ç‰Á
+	    gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+        shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+    }
+
+
+    var mvMatrix = mat4.create();
+    var pMatrix = mat4.create();
+
+// initShaderŠÖ”‚ÅŽæ“¾‚µ‚½projection matrix‚Æmodel-view matrix‚ð•\‚·uniform•Ï”‚Ö‚ÌŽQÆ‚ð—˜—p‚µ‚Ä
+// WebGL‚ÉJavaScriptŒ`Ž®‚Ìmatrix‚ð“n‚µ‚Ü‚·B
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
+        gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+    }
+
+
+// buffer‚ð•Û‘¶‚·‚é‚½‚ß‚Ì‚Q‚Â‚ÌƒOƒ[ƒoƒ‹•Ï”‚ð’è‹`‚·‚éB
+// ƒV[ƒ“’†‚Ìobject–ˆ‚ÉˆÙ‚È‚éƒOƒ[ƒoƒ‹•Ï”‚ðŽg‚¤‚×‚«‚Å‚Í‚È‚¢B
+    var triangleVertexPositionBuffer;
+    var squareVertexPositionBuffer;
+
+
+    function initBuffers() {
+        triangleVertexPositionBuffer = gl.createBuffer();
+// WebGL‚ÉˆÈ~‚Ìbuffer‚É‘Î‚·‚é‘€ì‚Í‘S‚Ä‚±‚Ìˆø”‚Æ‚µ‚ÄŽw’è‚µ‚½buffer‚É‘Î‚µ‚Äs‚¤‚æ‚¤‚É“`‚¦‚éB
+// ‚±‚Ì‘€ìŽž‚É‘ÎÛ‚Ìbuffer‚ðŽw’è‚·‚é‚Ì‚Å‚Í‚È‚­A‚ ‚ç‚©‚¶‚ß"current array buffer"‚ðŽw’è¨‘€ì‚ÌŽÀs‚ª•K{B
+	
+	gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+ 	
+	// •Ï”vertex:}Œ`‚Ì3D‹óŠÔ‚Å‚ÌÀ•W
+        var vertices = [
+             0.0,  1.0,  0.0,
+            -1.0, -1.0,  0.0,
+             1.0, -1.0,  0.0
+        ];
+
+	// JavaScript‚Ì”z—ñ‚ð‚à‚Æ‚ÉFloat32Array object‚ðì‚Á‚ÄWebGL‚É"Current Buffer"‚É‚±‚Ì’l‚ðÝ’è‚·‚é
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+
+        // buffer‚É‘Î‚·‚éÅŒã‚Ì‘€ì‚Í‚Q‚Â‚ÌV‚µ‚¢ƒvƒƒpƒeƒB‚ð’Ç‰Á‚·‚éŽ–‚Å‚·B(WebGL‚Ì‘g‚Ýž‚Ý‹@”\‚Å‚Í‚È‚¢‚ªAŒã‚Ù‚Ç–ð‚É—§‚Âj
+	// JavaScript‚Ì‘f°‚ç‚µ‚¢“_iˆ«‚¢“_‚Æ‚¢‚¤l‚à‚¢‚é‚©‚àj‚Ì‚P‚Â‚ÉAobject‚ÉŒÂX‚ÌƒvƒƒpƒeƒB‚ðÝ’è‚·‚é‚Ì‚ÉA–¾Ž¦“I‚ÉéŒ¾‚µ‚Ä‚¨‚­•K—v‚ª‚È‚¢A‚Æ‚¢‚¤‚Ì‚ª‚ ‚è‚Ü‚·B
+	// buffer object‚É‚ÍitemSize‚ÆnumItemsƒvƒƒpƒeƒB‚Í‚ ‚è‚Ü‚¹‚ñ‚Å‚µ‚½‚ªA‚±‚ê‚ÅƒvƒƒpƒeƒB‚ðŽ‚Â‚æ‚¤‚É‚È‚è‚Ü‚µ‚½B
+	// ‚±‚ÌƒvƒƒpƒeƒB‚Å9—v‘f‚©‚ç‚È‚ébuffer‚ª‚R‚Â‚Ì’¸“_(numItems)‚ðŽ‚¿A‚»‚ê‚¼‚ê‚Í‚R‚Â‚Ì”’l(itemSize)‚©‚ç¬‚è—§‚Â‚±‚Æ‚ð•\‚¹‚Ü‚·B
+	triangleVertexPositionBuffer.itemSize = 3;
+        triangleVertexPositionBuffer.numItems = 3;
+
+	// ˆÈ‰º‚ÍŽlŠpŒ`‚Ìê‡‚Åã‹L‚Æ“¯—l
+        squareVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        vertices = [
+             1.0,  1.0,  0.0,
+            -1.0,  1.0,  3.0,
+             1.0, -1.0,  0.0,
+            -1.0, -1.0,  -3.0
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        squareVertexPositionBuffer.itemSize = 3;
+        squareVertexPositionBuffer.numItems = 4;
+    }
+
+
+    // •`‰æ‚ðs‚¤‚½‚ß‚ÌŠÖ”
+    function drawScene() {
+	// viewportŠÖ”: WebGL‚Écanvas‚Ì‘å‚«‚³‚ð“`‚¦‚é
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+	
+	// •`‰æ‚Ì€”õ‚Æ‚µ‚Äcanvas‚ðÁ‹Ž
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+	// ‚±‚±‚ÅƒV[ƒ“‚ð‚Ç‚Ì‚æ‚¤‚ÉŒ©‚¹‚½‚¢‚©‚ÌÝ’è‚Æ‚Æ‚à‚Éperspective‚ðÝ’è‚µ‚Ü‚·B
+	// ‚±‚±‚Å‚ÌÝ’èFƒV[ƒ“‚Ìi‚’¼jŽ‹–ìŠp‚Æ‚µ‚Ä45“xAcanvas‚Ì•‚Æ‚‚³‚Ì”äAŽ‹“_‚É‚±‚ê‚æ‚è‹ß‚Ã‚¢‚½‚ç•\Ž¦‚µ‚È‚¢‹——£‚Æ‚µ‚Ä0.1A‚±‚êˆÈã—£‚ê‚½‚ç•\Ž¦‚µ‚È‚¢‚Æ‚¢‚¤‹——£‚Æ‚µ‚Ä100
+	// ‚±‚ÌperspectiveŠÖ”‚Í”ñí‚É•Ö—˜‚Å‚·‚ªWebGL‚É‘g‚Ýž‚Ü‚ê‚Ä‚¢‚È‚¢‚½‚ßA‚»‚±‚Åƒ†[ƒeƒBƒŠƒeƒBŠÖ”‚Æ‚µ‚ÄƒvƒƒOƒ‰ƒ€‚Ìã‚Ì•û‚Å’è‹`‚µ‚Ä‚¢‚Ü‚·B
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+
+	
+        mat4.identity(mvMatrix);
+
+        mat4.translate(mvMatrix, [-1.5, 0.0, -7.0]);
+        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	// ‚±‚ê‚ÍWebGL‚Écurrent‚Ìmodel-view matrix(‚»‚ê‚Æprojection matrix‚à‚¾‚¯‚ÇA‚»‚ê‚Í‚Ü‚½Œã‚Å)‚ð—˜—p‚·‚é‚æ‚¤‚É“`‚¦‚Ü‚·B
+	// model-view matrix‚ðƒOƒ‰ƒtƒBƒbƒNƒJ[ƒh‚É‘—‚é
+        setMatrixUniforms();
+	
+	// ‚±‚±‚Ü‚Å‚Ìˆ—‚ªI‚í‚é‚ÆAWebGL‚Í’¸“_‚Æ‚µ‚Äˆµ‚í‚ê‚é‚×‚«À•W‚Ì”z—ñ‚Æmatrix‚ðŽ‚Á‚Ä‚¢‚Ü‚·B
+	// [æ‚Ù‚Ç“n‚µ‚½’¸“_”z—ñ‚ÅŽOŠpŒ`‚ð•`‰æ‚µ‚È‚³‚¢B’¸“_‚Í”z—ñ‚Ì‚O”Ô‚Ì—v‘f‚©‚çnumItems”Ô–Ú‚Ì—v‘f‚Ü‚ÅŽg‚¢‚È‚³‚¢]
+        gl.drawArrays(gl.TRIANGLES, 0, triangleVertexPositionBuffer.numItems);
+	
+	
+	// mode-view matrix‚ð‰E‚Ö3“®‚©‚· (Œ»Ý¶‚É1.5‚ÌˆÊ’u‚É‚¢‚éj
+        mat4.translate(mvMatrix, [3.0, 0.0, 0.0]);
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+        setMatrixUniforms();
+	// 
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+    }
+
+
+    // –––webGL‚ðŠJŽn‚·‚éŠÖ”
+    function webGLStart() {
+	    var canvas = document.getElementById("lesson01-canvas"); 		// 3D‚Ì•`‰ææ‚Æ‚È‚écanvas element
+	    initGL(canvas);
+	    initShaders();
+	    initBuffers();							// Buffer‚Ì‰Šú‰»
+
+	    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+	    gl.clearDepth(1.0)
+	    gl.enable(gl.DEPTH_TEST);
+	    gl.depthFunc(gl.LEQUAL);
+
+	    setInterval(drawScene, 15);						// drawSceneŠÖ”‚ð15msce–ˆ‚ÉŒÄ‚Ño‚µ
+    }
+
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+    <a href="http://learningwebgl.com/blog/?p=28">&lt;&lt; Back to Lesson 1</a><br />
+
+    <canvas id="lesson01-canvas" style="border: none;" width="500" height="500"></canvas>
+    <!-- Canvas‚ÍHTML 5.0‚Ì‚½‚ß‚ÌV‚µ‚¢ƒ^ƒO@‚±‚±‚Å‚Í<canvas>ƒ^ƒO‚Å‚ÍƒŒƒCƒAƒEƒg‚ð’²®‚·‚éŠÈ’P‚È‘®«ˆÈŠO‚ÍŽw’è‚³‚ê‚Ä‚¢‚È‚¢B
+	 WebGL‚ÌJavaScript‚ÌƒZƒbƒgƒAƒbƒv‚Íƒy[ƒW‚ª“Ç‚Ýž‚Ü‚ê‚½‚Æ‚«‚Éˆê“x‚¾‚¯ŒÄ‚Î‚ê‚éwebGLStartŠÖ”‚©‚çŒÄ‚Ño‚³‚ê‚Ä‚¢‚éB 
+    -->
+    <br/>
+    <a href="http://learningwebgl.com/blog/?p=28">&lt;&lt; Back to Lesson 1</a><br />
+</body>
+
+</html>
