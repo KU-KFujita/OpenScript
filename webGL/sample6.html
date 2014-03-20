@@ -1,0 +1,487 @@
+﻿
+<html>
+
+<head>
+<title>波形入力による振動シミュレーション</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+<script type="text/javascript" src="javascript/glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="javascript/webgl-utils.js"></script>
+
+<!-- Shaderのコード-->
+<script id="shader-fs" type="x-shader/x-fragment">
+    /* floatの精度を指定 */
+    precision mediump float;  
+    varying vec4 vColor;
+
+    void main(void) {
+        gl_FragColor = vColor;
+    }
+    
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec4 aVertexColor; 
+
+    /* Uniform変数 :shaderの外部からアクセス可能 */
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    uniform float pointSize;
+
+    varying vec4 vColor;
+    
+    void main(void) {
+	/* model-view matrix とprojection matrixを掛けたものを最終的な頂点座標として出力 */
+        gl_Position 	= uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        gl_PointSize 	= pointSize;
+	vColor 		= aVertexColor;
+    }
+</script>
+
+
+<script type="text/javascript">
+    // マウスによる座標入力
+    var grid_x 		= new Array();
+    var grid_y 		= new Array();
+    // 描画用入力データ
+    var view_data 	= new Array();
+    // 描画用出力データ
+    var d 		= new Array();
+    var v 		= new Array();
+    var a 		= new Array();
+    
+    var gl;
+    function initGL(canvas) {
+        try {
+	    // gl => WebGLの中心となるコンテキストの取得
+            gl = canvas.getContext('webgl') || canvas.getContext("experimental-webgl");
+	    
+	    // プロパティ：viewportWidthとviewportHeightを新たに追加
+	    gl.viewportWidth 	= canvas.width;
+            gl.viewportHeight 	= canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+    // フラグメントシェーダ var fragmentShader = getShader(gl, "shader-fs");
+    // バーテックスシェーダ var vertexShader = getShader(gl, "shader-vs");
+    // シェーダを生成する関数
+    function getShader(gl, id) {
+        // HTMLからscriptタグへの参照を取得
+	var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+	// 生成されたシェーダにソースを割り当てる
+        gl.shaderSource(shader, str);
+	// シェーダをコンパイルする
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+	
+	shaderProgram.vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+        gl.enableVertexAttribArray(shaderProgram.vertexColorAttribute);
+
+        shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+        shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+	
+	
+    }
+
+
+    var mvMatrix = mat4.create();
+    var mvMatrixStack = [];
+    var pMatrix = mat4.create();
+
+    function mvPushMatrix() {
+        var copy = mat4.create();
+        mat4.set(mvMatrix, copy);
+        mvMatrixStack.push(copy);
+    }
+    function mvPopMatrix() {
+        if (mvMatrixStack.length == 0) {
+            throw "Invalid popMatrix!";
+        }
+        mvMatrix = mvMatrixStack.pop();
+    }
+
+    // initShader関数で取得したprojection matrixとmodel-view matrixを表すuniform変数への参照を利用して
+    // WebGLにJavaScript形式のmatrixを渡します。
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
+        gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+    }
+
+
+    // bufferを保存するためのグローバル変数を定義する。
+    var triangleVertexPositionBuffer;
+    var waveVertexPositionBuffer;    
+    var triangleVertexColorBuffer;
+    var waveVertexColorBuffer;
+    
+    // マーカーのサイズ
+    var pointSize = Number(5);
+
+    function initBuffers() {
+        triangleVertexPositionBuffer = gl.createBuffer();
+        // WebGLに以降のbufferに対する操作は全てこの引数として指定したbufferに対して行うように伝える。
+	// この操作時に対象のbufferを指定するのではなく、あらかじめ"current array buffer"を指定→操作の実行が必須。
+	
+	gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+ 	
+	// 変数vertex:図形の3D空間での座標
+	var grid = new Array();
+	// X軸
+	grid.push(-30,0,0,30,0,0);
+	// Y軸
+	grid.push(0,-10,0,0,10,0);
+	// X軸目盛
+	for(var i=0;i<121;i++){
+	grid.push(-30+0.5*i,-0.2,0,-30+0.5*i,0.2,0);
+	}
+	var vertices = grid;
+	
+	// JavaScriptの配列をもとにFloat32Array objectを作ってWebGLに"Current Buffer"にこの値を設定する
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        triangleVertexPositionBuffer.itemSize = 3;
+        triangleVertexPositionBuffer.numItems = 240;
+
+	triangleVertexColorBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+	var colors = new Array();
+	for(i = 0; i<240;i++){
+	colors.push(1.0,1.0,1.0,1.0);
+	}
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors),gl.STATIC_DRAW);
+	triangleVertexColorBuffer.itemSize = 4;
+	triangleVertexColorBuffer.numItems = 240;
+
+	// 色情報
+	waveVertexColorBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, waveVertexColorBuffer);
+	var colors = new Array();
+	for(i = 0; i<601;i++){
+	colors.push(1.0-1/600*i,1/600*i,0.0,1.0);
+	}
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors),gl.STATIC_DRAW);
+	waveVertexColorBuffer.itemSize = 4;
+	waveVertexColorBuffer.numItems = 600;
+
+	// ***********************************************
+    }
+
+    // ■sample3.htmlから追加■ 回転を与える変数
+    var rTri = 0;
+    var rdata = new Array();
+    // 描画を行うための関数
+    function drawScene() {
+	// viewport関数: WebGLにcanvasの大きさを伝える
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+	
+	// 描画の準備としてcanvasを消去
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+	// ここでシーンをどのように見せたいかの設定とともにperspectiveを設定します。
+	// ここでの設定：シーンの（垂直）視野角として45度、canvasの幅と高さの比、視点にこれより近づいたら表示しない距離として0.1、これ以上離れたら表示しないという距離として100
+	// このperspective関数は非常に便利ですがWebGLに組み込まれていないため、そこでユーティリティ関数としてプログラムの上の方で定義しています。
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+
+        mat4.identity(mvMatrix);
+	
+	// 座標位置の移動（カメラのアングル？）
+        mat4.translate(mvMatrix, [0.0, 0.0, -15.0]);
+
+	// ■sample3.htmlから追加■ 
+	mvPushMatrix();
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	gl.bindBuffer(gl.ARRAY_BUFFER,triangleVertexColorBuffer);
+	gl.vertexAttribPointer(shaderProgram.vertexColorAttribute,triangleVertexColorBuffer.itemSize,gl.FLOAT, false, 0,0);
+	
+	// これはWebGLにcurrentのmodel-view matrix(それとprojection matrixもだけど、それはまた後で)を利用するように伝えます。
+	// model-view matrixをグラフィックカードに送る
+        setMatrixUniforms();
+	
+	// uniformLocationを配列に取得
+	var uniLocation = new Array();
+	uniLocation[0]  = gl.getUniformLocation(shaderProgram, 'uMVMatrix');
+	uniLocation[1]  = gl.getUniformLocation(shaderProgram, 'pointSize');
+	
+	// ここまでの処理が終わると、WebGLは頂点として扱われるべき座標の配列とmatrixを持っています。
+	// ここでの処理イメージ ⇒ 先ほど渡した頂点配列で三角形を描画しなさい。頂点は配列の０番の要素からnumItems番目の要素まで使いなさい
+	// 第１引数をプリミティブタイプという。
+	// プリミティブタイプの種類: POINTS	 ⇒1つの頂点を１つの点として描画
+	// プリミティブタイプの種類: LINES	 ⇒頂点を順に結んでいくが，直線は連続しない
+	// プリミティブタイプの種類: LINE_STRIP  ⇒頂点を順に結んでいき，直線が連続する
+	// プリミティブタイプの種類: LINE_LOOP   ⇒頂点を順に結んでいき，開始と終端の頂点も結ばれる。
+
+	gl.uniform1f(uniLocation[1], pointSize);
+
+        //gl.drawArrays(gl.POINTS, 0, triangleVertexPositionBuffer.numItems);
+        gl.drawArrays(gl.LINES, 0, triangleVertexPositionBuffer.numItems);
+        mvPopMatrix();
+
+	// *****************************************************
+	// 波形を描画
+	// 時刻歴波形データ
+	
+	mvPushMatrix();
+	// 【入力】波形データの頂点座標を更新
+　　    var num_input_data 	= view_data.length;
+        var input_data     	= new Float32Array(num_input_data);
+	var j_input        	= num_input_data - 1;
+	// 描画用データview_dataを頂点マトリクス生成用データr_dataに格納
+	for(var i = 0; i < 600; i++){
+		if(view_data[j_input]){
+			input_data[i] = parseFloat((view_data[j_input]-250)/100);
+		}
+		j_input    	= j_input - 1;
+        }
+	
+	// 【出力】波形データの頂点座標を更新
+　　    var num_output_data 	= d.length;
+        var output_data    	= new Float32Array(num_output_data);
+	var j_output       	= num_output_data - 1;
+	// 描画用データview_dataを頂点マトリクス生成用データr_dataに格納
+	for(i = 0; i < 600; i++){
+		if(d[j_output]){
+			output_data[i] = parseFloat((d[j_output])*1000);
+		}
+		j_output 	= j_output - 1;
+        }
+
+	var IO_conf = document.getElementsByName("IO");
+	for(i = 0; i < IO_conf.length; i++){
+	    	if (IO_conf[i].checked) {
+			if(IO_conf[i].value == '0'){
+				var r_data = input_data;
+			}
+			else if(IO_conf[i].value == '1'){
+				var r_data = output_data;
+			}
+		}
+	}
+
+	waveVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, waveVertexPositionBuffer);
+	r_wave_vertices = new Array();
+	for(i=0;i<601;i++){
+		if(output_data[i]){
+			r_wave_vertices.push(0-15/600*i,2*r_data[i],0);	
+		}
+		else{
+			r_wave_vertices.push(0-15/600*i,0.0,0);
+		}
+	}
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(r_wave_vertices),gl.DYNAMIC_DRAW);
+	waveVertexPositionBuffer.itemSize = 3;
+	waveVertexPositionBuffer.numItems = 600;
+	    
+	gl.bindBuffer(gl.ARRAY_BUFFER, waveVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, waveVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	gl.bindBuffer(gl.ARRAY_BUFFER, waveVertexColorBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, waveVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	//gl.drawArrays(gl.POINTS, 0, waveVertexPositionBuffer.numItems);
+        gl.drawArrays(gl.LINE_STRIP, 0, waveVertexPositionBuffer.numItems);
+        mvPopMatrix();
+	// *****************************************************
+
+    }
+    
+
+    // 波形アニメーションの為の制御変数
+    var lastTime_wave   = 0;
+    function animate_count(){
+	var timeNow = new Date().getTime();
+        var elapsed = timeNow - lastTime_wave;
+	// elapsed:時間刻み→描画用データを一定の時間刻みで取得する
+	// grid_xは座標データ	
+	if(elapsed > 10){
+		view_data.push(grid_x[grid_x.length-1]);
+		if(d[d.length-1]){
+			var d_  = parseFloat(d[d.length-1]);
+			var v_  = parseFloat(v[v.length-1]);
+			var a_  = parseFloat(a[a.length-1]);
+		}else{
+			var d_  = 0;
+			var v_  = 0;
+			var a_  = 0;
+		}		
+		var l_  = parseFloat((grid_x[grid_x.length-1]-250)/500);
+		//if(grid_x[grid_x.length-3]){
+		//	var l_ = diff_disp2acc((grid_x[grid_x.length-3]-250)/2000,(grid_x[grid_x.length-2]-250)/2000,(grid_x[grid_x.length-1]-250)/2000);
+		//}
+		//else{
+		//	var l_  = 0;
+		//}
+		timeHistoryAnalysis(d_,v_,a_,l_);
+		d.push(disp);
+		v.push(vel);
+		a.push(acc);
+		lastTime_wave = timeNow;
+	}
+    }
+
+    function tick() {
+	if(tick.animate){
+	        requestAnimFrame(tick);
+		drawScene();
+	        animate_count();	// 波形アニメーションの制御パラメタ
+	}
+    }
+    // ■sample3.htmlから追加(ここまで)■
+
+    
+    // ※webGLを開始する関数（描画開始からまずはじめに実行される関数）
+    function webGLStart() {	    
+    	    var count = 0;
+	    var canvas = document.getElementById("lesson03-canvas"); 	// 3Dの描画先となるcanvas element
+	    initGL(canvas);
+	    initShaders();
+	    initBuffers();						// Bufferの初期化
+	    
+	    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+	    gl.enable(gl.DEPTH_TEST);
+	    tick.animate = true;
+	    tick();
+    }
+
+    // 描画の停止ボタン
+    function webGLStop(){
+    	tick.animate = false;
+    }
+
+
+function getMousePosition_interval(){
+     grid_x.push(event.x + document.body.scrollLeft);
+     if(grid_x.length > 800){
+		grid_x = grid_x.splice(150);
+     }
+}
+
+var icon  = 0;
+var timer;
+		
+function setPosition(){
+	window.document.onmousedown = function(e){
+		icon = 1;
+		window.document.onmousemove = function(e){
+		    	getMousePosition_interval();
+     		}
+	}
+}
+
+
+function offPosition(){
+	window.document.onmouseout = function(e){
+		if(icon == 1){
+			alert('データ入力を終了しました');
+			icon = 0;
+		}
+		window.document.onmousedown = function(e){
+		}
+		window.document.onmousemove = function(e){
+		// mousemoveに対して何も処理を行わない
+		}
+	}
+}
+
+// ■■■　平均加速度法による1質点系時刻歴応答解析 ■■■
+var disp 	= parseFloat(0);
+var vel 	= parseFloat(0);
+var acc 	= parseFloat(0);
+var m 		= parseFloat(10000);
+var c 		= parseFloat(8000);
+var k 		= parseFloat(50000);
+var dt  	= parseFloat(0.01);	
+function timeHistoryAnalysis(disp_,vel_,acc_,loading){
+	//alert(disp_ + ',' + vel_ + ',' + acc_ + ',' + loading);
+	acc 	= -(loading + c/m*(vel_ + 0.5 * acc_ * dt) + k/m*(disp_+vel_*dt + 0.25*acc_*Math.pow(dt,2)))/(1 + 0.5*c/m*dt + 0.25*k/m*Math.pow(dt,2));
+	vel 	= vel_ + (acc - acc_)/2*dt;
+	disp 	= disp_ + vel_*dt + (acc - acc_)/4*Math.pow(dt,2);
+	return disp,vel,acc;
+}
+
+// ■■■ 変位データ→加速度データ ■■■
+function diff_disp2acc(disp1,disp2,disp3){
+    var acc_ = ((disp3-disp2)-(disp2-disp1))/Math.pow(dt,2);
+    //alert(acc_);
+    return acc_; 
+}
+</script>
+
+
+</head>
+
+<body>
+
+
+<p>
+画像をクリックして，マウスを動かしてください。<br>
+画像からマウスが離れると，波形データの入力が終了します。<br>
+</p>
+<img src="material/fig_sample5.png" style="width:500px;" onmouseover="setPosition();" onclick="this.src='material/fig_sample5_2.png';webGLStart();" onmouseout ="offPosition();webGLStop();this.src='material/fig_sample5.png';">
+<br>
+入力波形を表示<input type="radio" name="IO" value=0 checked>&nbsp;&nbsp;／&nbsp;&nbsp;出力波形を表示<input type="radio" name="IO" value=1>
+
+<hr width=500px align=left>
+    <canvas id="lesson03-canvas" style="border: none;" width="500" height="200"></canvas>
+    <!-- CanvasはHTML 5.0のための新しいタグ　ここでは<canvas>タグではレイアウトを調整する簡単な属性以外は指定されていない。
+	 WebGLのJavaScriptのセットアップはページが読み込まれたときに一度だけ呼ばれるwebGLStart関数から呼び出されている。 
+    -->
+    <br/>
+</body>
+
+</html>
