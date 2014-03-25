@@ -5,8 +5,8 @@
 <title>波形入力による振動シミュレーション</title>
 <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
 
-<script type="text/javascript" src="javascript/glMatrix-0.9.5.min.js"></script>
-<script type="text/javascript" src="javascript/webgl-utils.js"></script>
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="webgl-utils.js"></script>
 
 <!-- Shaderのコード-->
 <script id="shader-fs" type="x-shader/x-fragment">
@@ -297,7 +297,7 @@
 	// 描画用データview_dataを頂点マトリクス生成用データr_dataに格納
 	for(i = 0; i < 600; i++){
 		if(d[j_output]){
-			output_data[i] = parseFloat((d[j_output])*1000);
+			output_data[i] = parseFloat((d[j_output])*10);
 		}
 		j_output 	= j_output - 1;
         }
@@ -319,10 +319,10 @@
 	r_wave_vertices = new Array();
 	for(i=0;i<601;i++){
 		if(output_data[i]){
-			r_wave_vertices.push(0-15/600*i,2*r_data[i],0);	
+			r_wave_vertices.push(15-30/600*i,2*r_data[i],0);	
 		}
 		else{
-			r_wave_vertices.push(0-15/600*i,0.0,0);
+			r_wave_vertices.push(15-30/600*i,0.0,0);
 		}
 	}
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(r_wave_vertices),gl.DYNAMIC_DRAW);
@@ -413,7 +413,28 @@ function getMousePosition_interval(){
 
 var icon  = 0;
 var timer;
-		
+var m;
+var c;
+var k;
+
+function setMCK(){
+	m 	= parseFloat(document.getElementById('mass').value);
+	k 	= parseFloat(document.getElementById('stif').value);
+	c 	= parseFloat(document.getElementById('damp').value);
+	if(m){
+	}else{
+	alert('質量が未入力です');
+	}
+	if(c){
+	}else{
+	alert('減衰係数が未入力です');
+	}
+	if(k){
+	}else{
+	alert('剛性が未入力です');
+	}
+
+}
 function setPosition(){
 	window.document.onmousedown = function(e){
 		icon = 1;
@@ -442,15 +463,13 @@ function offPosition(){
 var disp 	= parseFloat(0);
 var vel 	= parseFloat(0);
 var acc 	= parseFloat(0);
-var m 		= parseFloat(10000);
-var c 		= parseFloat(8000);
-var k 		= parseFloat(50000);
+
 var dt  	= parseFloat(0.01);	
 function timeHistoryAnalysis(disp_,vel_,acc_,loading){
 	//alert(disp_ + ',' + vel_ + ',' + acc_ + ',' + loading);
 	acc 	= -(loading + c/m*(vel_ + 0.5 * acc_ * dt) + k/m*(disp_+vel_*dt + 0.25*acc_*Math.pow(dt,2)))/(1 + 0.5*c/m*dt + 0.25*k/m*Math.pow(dt,2));
-	vel 	= vel_ + (acc - acc_)/2*dt;
-	disp 	= disp_ + vel_*dt + (acc - acc_)/4*Math.pow(dt,2);
+	vel 	= vel_ + (acc + acc_)/2*dt;
+	disp 	= disp_ + vel_*dt + (acc + acc_)/4*Math.pow(dt,2);
 	return disp,vel,acc;
 }
 
@@ -466,13 +485,17 @@ function diff_disp2acc(disp1,disp2,disp3){
 </head>
 
 <body>
-
-
+<table border="1">
+<tr><th colspan="2">諸元</th></tr>
+<tr><td>質量</td><td><input type="text" id="mass">[kg]</td></tr><br>
+<tr><td>剛性</td><td><input type="text" id="stif">[N/m]</td></tr><br>
+<tr><td>減衰係数</td><td><input type="text" id="damp">[Ns/m]</td></tr><br>
+</table>
 <p>
 画像をクリックして，マウスを動かしてください。<br>
 画像からマウスが離れると，波形データの入力が終了します。<br>
 </p>
-<img src="material/fig_sample5.png" style="width:500px;" onmouseover="setPosition();" onclick="this.src='material/fig_sample5_2.png';webGLStart();" onmouseout ="offPosition();webGLStop();this.src='material/fig_sample5.png';">
+<img src="fig_sample5.png" style="width:500px;" onmouseover="setPosition();" onclick="this.src='fig_sample5_2.png';webGLStart();setMCK();" onmouseout ="offPosition();webGLStop();this.src='fig_sample5.png';">
 <br>
 入力波形を表示<input type="radio" name="IO" value=0 checked>&nbsp;&nbsp;／&nbsp;&nbsp;出力波形を表示<input type="radio" name="IO" value=1>
 
