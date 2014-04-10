@@ -1,0 +1,26 @@
+.optionmenu 
+{
+  background:RGB(220,220,220);
+  border:double 3px;
+  position:absolute;
+  padding:10px;
+  left:15px;
+  top:615px;
+  width:400px;
+  height:130px;
+  display:none;
+}
+
+.setvalue
+{
+	width:40px;
+	border:none;
+	color:RGB(255,255,255);
+	background-color:RGB(100,100,100);"
+}
+
+th.a
+{
+color:white;
+width:50;
+}

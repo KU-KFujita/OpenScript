@@ -192,6 +192,49 @@ function setPar(){
     var v 		= new Array();
     var a 		= new Array();
     
+    // モデル回転用制御変数
+    var mouseDown = false;
+    var lastMouseX = null;
+    var lastMouseY = null;
+    var modelRotationMatrix = mat4.create();
+    mat4.identity(modelRotationMatrix);
+
+    function degToRad(degrees) {
+        return degrees * Math.PI / 180;
+    }
+
+    function handleMouseDown(event) {
+        mouseDown = true;
+        lastMouseX = event.clientX;
+        lastMouseY = event.clientY;
+    }
+
+    function handleMouseUp(event) {
+        mouseDown = false;
+    }
+
+    function handleMouseMove(event) {
+        if (!mouseDown) {
+            return;
+        }
+        var newX = event.clientX;
+        var newY = event.clientY;
+
+        var deltaX = newX - lastMouseX
+        var newRotationMatrix = mat4.create();
+        mat4.identity(newRotationMatrix);
+        mat4.rotate(newRotationMatrix, degToRad(deltaX / 10), [0, 1, 0]);
+
+        var deltaY = newY - lastMouseY;
+        mat4.rotate(newRotationMatrix, degToRad(deltaY / 10), [1, 0, 0]);
+
+        mat4.multiply(newRotationMatrix, modelRotationMatrix, modelRotationMatrix);
+
+        lastMouseX = newX
+        lastMouseY = newY;
+    }
+
+    // 初期に実行される関数群
     var gl;
     function initGL(canvas) {
         try {
@@ -520,7 +563,21 @@ function setPar(){
 	}
 	if(icon_view_IO == 1){
 		mvPushMatrix();
-		mat4.translate(mvMatrix, [parseFloat(r_data[0]*5), 0.0, 0.0]);
+		squareVertexPositionBuffer = gl.createBuffer();
+	        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+	        vertices = [
+	             5.0 + parseFloat(r_data[5])*5,  5.0,  0.0,
+	            -5.0 + parseFloat(r_data[5])*5,  5.0,  0.0,
+	             5.0, -5.0,  0.0,
+	            -5.0, -5.0,  0.0
+	        ];
+	        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+		squareVertexPositionBuffer.itemSize = 3;
+		squareVertexPositionBuffer.numItems = 4;
+		//setMatrixUniforms();
+		mat4.multiply(mvMatrix, modelRotationMatrix);
+	
+		//mat4.translate(mvMatrix, [parseFloat(r_data[0]*5), 0.0, 0.0]);
 		// 建物モデルの描画
 		// 色情報の更新
 		BuildModelColorBuffer = gl.createBuffer();
@@ -568,7 +625,7 @@ function setPar(){
         var elapsed = timeNow - lastTime_wave;
 	// elapsed:時間刻み→描画用データを一定の時間刻みで取得する
 	// grid_xは座標データ	
-	if(elapsed > 10){
+	if(elapsed > 20){
 		view_data.push(grid_x[grid_x.length-1]);
 		if(d[d.length-1]){
 			var d_  = parseFloat(d[d.length-1]);
@@ -614,6 +671,10 @@ function setPar(){
 	    
 	    gl.clearColor(0.0, 0.0, 0.0, 1.0);
 	    gl.enable(gl.DEPTH_TEST);
+	    canvas.onmousedown 	 = handleMouseDown;
+            canvas.onmouseup 	 = handleMouseUp;
+            canvas.onmousemove 	 = handleMouseMove;
+
 	    tick.animate = true;
 	    tick();
     }
@@ -695,10 +756,9 @@ var disp 	= parseFloat(0);
 var vel 	= parseFloat(0);
 var acc 	= parseFloat(0);
 
-var dt  	= parseFloat(0.01);	
+var dt  	= parseFloat(0.02);	
 function timeHistoryAnalysis(disp_,vel_,acc_,loading){
-	//alert(disp_ + ',' + vel_ + ',' + acc_ + ',' + loading);
-	acc 	= -(-loading + c/m*(vel_ + 0.5 * acc_ * dt) + k/m*(disp_+vel_*dt + 0.25*acc_*Math.pow(dt,2)))/(1 + 0.5*c/m*dt + 0.25*k/m*Math.pow(dt,2));
+	acc 	= (loading - c/m*(vel_ + acc_*dt/2) - k/m*(disp_+vel_*dt + 0.25*acc_*Math.pow(dt,2)))/(1 + c/m*dt/2 + k/m*Math.pow(dt,2)/4);
 	vel 	= vel_ + (acc + acc_)/2*dt;
 	disp 	= disp_ + vel_*dt + (acc + acc_)/4*Math.pow(dt,2);
 	return disp,vel,acc;
@@ -767,9 +827,9 @@ function ToggleOff(){
 	<td style="width:380px;"rowspan="3" align="right"><button style="height:100%;" onmousedown="setPar();">諸元設定<br>オプション</button></td>
     </tr>
     <tr>
-	<td align="center"><input type="text" name="slider" id="slider_mass" value="100" style="width:40px;border:none;color:RGB(255,255,255);background-color:RGB(100,100,100);"></td>
+	<td align="center"><input type="text" name="slider" id="slider_mass" value="10" style="width:40px;border:none;color:RGB(255,255,255);background-color:RGB(100,100,100);"></td>
         <td align="center"><input type="text" name="slider" id="slider_stif" value="100" style="width:40px;border:none;color:RGB(255,255,255);background-color:RGB(100,100,100);"></td>
-        <td align="center"><input type="text" name="slider" id="slider_damp" value="10" style="width:40px;border:none;color:RGB(255,255,255);background-color:RGB(100,100,100);"></td>
+        <td align="center"><input type="text" name="slider" id="slider_damp" value="1" style="width:40px;border:none;color:RGB(255,255,255);background-color:RGB(100,100,100);"></td>
     </tr>
     <tr>
     <td  align="center">
@@ -794,9 +854,9 @@ function ToggleOff(){
    </table>
    
    <div id="par" style="display:none;" onmouseout="setPar();">
-   質量最小値：<input type="text" value="" id="mass_min">／質量最大値：<input type="text" value="" id="mass_max">
-   剛性最小値：<input type="text" value="" id="stif_min">／剛性最大値：<input type="text" value="" id="stif_max">
-   減衰最小値：<input type="text" value="" id="damp_min">／減衰最大値：<input type="text" value="" id="damp_max">   
+   質量最小値：<input type="text" value="" id="mass_min">／質量最小値：<input type="text" value="" id="mass_max">
+   剛性最小値：<input type="text" value="" id="stif_min">／剛性最小値：<input type="text" value="" id="stif_max">
+   減衰最小値：<input type="text" value="" id="damp_min">／減衰最小値：<input type="text" value="" id="damp_max">   
    </div>
 </form>
 </div>
