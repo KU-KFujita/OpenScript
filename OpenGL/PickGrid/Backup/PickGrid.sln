@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PickGrid", "PickGrid\PickGrid.vcproj", "{A9C43AEA-C7E5-475D-9536-09DB62220924}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A9C43AEA-C7E5-475D-9536-09DB62220924}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A9C43AEA-C7E5-475D-9536-09DB62220924}.Debug|Win32.Build.0 = Debug|Win32
+		{A9C43AEA-C7E5-475D-9536-09DB62220924}.Release|Win32.ActiveCfg = Release|Win32
+		{A9C43AEA-C7E5-475D-9536-09DB62220924}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

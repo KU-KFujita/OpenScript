@@ -1,0 +1,8 @@
+﻿  stdafx.cpp
+  スキップ中... (関連する変更は検出されませんでした)
+  PickGridView.cpp
+  PickGridDoc.cpp
+  PickGrid.cpp
+  MainFrm.cpp
+MainFrm.obj : warning LNK4075: /EDITANDCONTINUE は /SAFESEH の指定によって無視されます。
+  PickGrid.vcxproj -> C:\Users\yamakawa\Dropbox\Projects\ADOS\PickGrid\Debug\PickGrid.exe
